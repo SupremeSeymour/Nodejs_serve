@@ -5,9 +5,20 @@ const bodyParser = require('body-parser')
 const ethers = require('ethers')
 
 const app = express()
-app.use(cors({
-  origin: process.env.ORIGIN
-}));
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (process.env.ALLOWED_ORIGINS.split(',').indexOf(origin) !== -1) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+
 app.use(bodyParser.json())
 
 const provider = new ethers.providers.JsonRpcProvider(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)
