@@ -3,6 +3,8 @@ const express = require('express')
 const cors = require('cors')
 const bodyParser = require('body-parser')
 const ethers = require('ethers')
+const readline = require('readline');
+
 
 const app = express()
 
@@ -49,10 +51,59 @@ app.post('/completeSession', async (req, res) => {
   }
 })
 
+
+
+function handleCLI() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  rl.on('line', (input) => {
+    const command = input.trim().toLowerCase();
+    switch (command) {
+      case 'sleep':
+        enterStandbyMode();
+        break;
+      case 'wake':
+        enterWakeMode();
+        break;
+      default:
+        console.log('Unknown command. Use "sleep" or "wake"');
+    }
+  });
+}
+
+
+let serverInstance;
+
+function enterStandbyMode() {
+  if (serverInstance) {
+    serverInstance.close(() => {
+      console.log('Server is in standby mode');
+    });
+  } else {
+    console.log('Server is already in standby mode');
+  }
+}
+
+function enterWakeMode() {
+  if (!serverInstance) {
+    serverInstance = app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+  } else {
+    console.log('Server is already running');
+  }
+}
+
+
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`)
-})
+serverInstance = app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+  handleCLI();
+});
+
 
 //In this setup, when the user clicks the button on the frontend, 
 //it will send a request to the Node.js server.
