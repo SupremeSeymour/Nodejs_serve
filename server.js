@@ -10,14 +10,18 @@ const app = express()
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (process.env.ALLOWED_ORIGINS.split(',').indexOf(origin) !== -1) {
-      callback(null, true)
+    console.log('Request origin:', origin); // Add this line
+    console.log('Allowed origins:', process.env.ALLOWED_ORIGINS); // Add this line
+
+    if (!origin || process.env.ALLOWED_ORIGINS.split(',').indexOf(origin) !== -1) {
+      callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'))
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
 };
+
 
 app.use(cors(corsOptions));
 
