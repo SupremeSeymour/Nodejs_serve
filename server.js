@@ -4,6 +4,8 @@ const cors = require('cors')
 const bodyParser = require('body-parser')
 const ethers = require('ethers')
 const readline = require('readline');
+const SSE = require('express-sse');
+const compression = require('compression')
 
 
 const app = express()
@@ -23,13 +25,37 @@ const corsOptions = {
 };
 
 
+// Initialize SSE
+const sse = new SSE();
+
 app.use(cors(corsOptions));
 
 app.use(bodyParser.json())
 
+app.use(compression())
+
+// SSE route
+app.get('/stream', sse.init);
+
 const provider = new ethers.providers.JsonRpcProvider(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)
+const providerAN = new ethers.providers.JsonRpcProvider(`https://cosmological-clean-sun.nova-mainnet.discover.quiknode.pro/${process.env.QUICKNODE_API_KEY}`)
 const privateKey = process.env.PRIVATE_KEY
 const wallet = new ethers.Wallet(privateKey, provider)
+const walletAN = new ethers.Wallet(privateKey, providerAN)
+
+//TEST
+
+let counter = 0;
+
+// // Test SSE route
+// app.get('/testStream', sse.init);
+
+// setInterval(() => {
+//   console.log('Sending test event:', counter);
+//   sse.send({ test: counter });
+//   counter += 1;
+// }, 5000);
+
 
 app.post('/completeSession', async (req, res) => {
   try {
@@ -54,6 +80,72 @@ app.post('/completeSession', async (req, res) => {
     res.status(500).json({ success: false, message: error.message })
   }
 })
+
+app.post('/completeCaptcha', async (req, res) => {
+  try {
+    const { address, abi, functionName, args } = req.body
+
+    const contract = new ethers.Contract(address, abi, walletAN)
+    const overrides = { gasLimit: 502466 }
+    const transactionResponse = await contract[functionName](...args, overrides)
+
+    // Wait for the transaction to be successful
+    const transactionReceipt = await providerAN.waitForTransaction(transactionResponse.hash)
+
+    // Check if the transaction was successful
+    if (transactionReceipt.status === 1) {
+      res.json({ success: true, data: transactionResponse, transactionHash: transactionResponse.hash }) 
+    } else {
+      console.error('Transaction failed:', transactionReceipt) // Add a console log here
+      res.status(500).json({ success: false, message: 'Transaction failed.' })
+    }
+  } catch (error) {
+    console.error('Server error:', error) // Add a console log here
+    res.status(500).json({ success: false, message: error.message })
+  }
+})
+
+
+app.post('/listenEvent', async (req, res) => {
+  try {
+    const { address, abi, eventName } = req.body;
+    const contract = new ethers.Contract(address, abi, walletAN);
+
+    const eventSignature = ethers.utils.id(`${eventName}`); // modify this according to your event parameters
+    const filter = {
+      address: contract.address,
+      topics: [eventSignature],
+    };
+
+    // providerAN.on(filter, (log) => {
+    //   console.log(`${eventName} event detected:`, log);
+    //   // Push event data to the SSE stream
+    //   sse.send(log);
+    // });
+
+    providerAN.on({ address: contract.address }, (ts) => {
+      console.log(`Event detected:`, ts);
+      try {
+        const decodedData = ethers.utils.defaultAbiCoder.decode(
+          [ 'address', 'bool'],
+          ts.data
+        )
+        console.log(decodedData);
+        console.log('Sending data:', { address: decodedData[0], result: decodedData[1] });
+        sse.send({ address: decodedData[0], result: decodedData[1] });
+      } catch (error) {
+        console.error('Error decoding data:', error);
+      }
+    });
+
+    res.json({ success: true, message: `Listening for ${eventName} events` });
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 
 
 
