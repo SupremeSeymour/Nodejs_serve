@@ -7,7 +7,6 @@ const readline = require('readline');
 const SSE = require('express-sse');
 const compression = require('compression')
 
-
 const app = express()
 
 const corsOptions = {
