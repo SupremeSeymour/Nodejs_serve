@@ -7,6 +7,7 @@ const readline = require('readline');
 const SSE = require('express-sse');
 const compression = require('compression')
 
+
 const app = express()
 
 const corsOptions = {
@@ -36,10 +37,8 @@ app.use(compression())
 // SSE route
 app.get('/stream', sse.init);
 
-const provider = new ethers.providers.JsonRpcProvider(`https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`)
 const providerAN = new ethers.providers.JsonRpcProvider(`https://cosmological-clean-sun.nova-mainnet.discover.quiknode.pro/${process.env.QUICKNODE_API_KEY}`)
 const privateKey = process.env.PRIVATE_KEY
-const wallet = new ethers.Wallet(privateKey, provider)
 const walletAN = new ethers.Wallet(privateKey, providerAN)
 
 //TEST
@@ -60,32 +59,56 @@ app.post('/completeSession', async (req, res) => {
   try {
     const { address, abi, functionName, args } = req.body
 
-    const contract = new ethers.Contract(address, abi, wallet)
+    const contract = new ethers.Contract(address, abi, walletAN)
     const overrides = { gasLimit: 502466 }
+
+    // Estimate gas and simulate transaction execution
+    try {
+      const estimatedGas = await contract.estimateGas[functionName](...args, overrides);
+      console.log(`Estimated gas: ${estimatedGas}`);
+    } catch (error) {
+      console.error('Transaction would fail:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Send transaction
     const transactionResponse = await contract[functionName](...args, overrides)
 
     // Wait for the transaction to be successful
-    const transactionReceipt = await provider.waitForTransaction(transactionResponse.hash)
+    const transactionReceipt = await providerAN.waitForTransaction(transactionResponse.hash)
 
     // Check if the transaction was successful
     if (transactionReceipt.status === 1) {
       res.json({ success: true, data: transactionResponse })
     } else {
-      console.error('Transaction failed:', transactionReceipt) // Add a console log here
+      console.error('Transaction failed:', transactionReceipt)
       res.status(500).json({ success: false, message: 'Transaction failed.' })
     }
   } catch (error) {
-    console.error('Server error:', error) // Add a console log here
+    console.error('Server error:', error)
     res.status(500).json({ success: false, message: error.message })
   }
 })
+
+
 
 app.post('/completeCaptcha', async (req, res) => {
   try {
     const { address, abi, functionName, args } = req.body
 
     const contract = new ethers.Contract(address, abi, walletAN)
-    const overrides = { gasLimit: 502466 }
+    const overrides = { gasLimit: 902466 }
+
+    // Estimate gas and simulate transaction execution
+    try {
+      const estimatedGas = await contract.estimateGas[functionName](...args, overrides);
+      console.log(`Estimated gas: ${estimatedGas}`);
+    } catch (error) {
+      console.error('Transaction would fail:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Send transaction
     const transactionResponse = await contract[functionName](...args, overrides)
 
     // Wait for the transaction to be successful
@@ -95,14 +118,16 @@ app.post('/completeCaptcha', async (req, res) => {
     if (transactionReceipt.status === 1) {
       res.json({ success: true, data: transactionResponse, transactionHash: transactionResponse.hash }) 
     } else {
-      console.error('Transaction failed:', transactionReceipt) // Add a console log here
+      console.error('Transaction failed:', transactionReceipt)
       res.status(500).json({ success: false, message: 'Transaction failed.' })
     }
   } catch (error) {
-    console.error('Server error:', error) // Add a console log here
+    console.error('Server error:', error.message, error.stack)
     res.status(500).json({ success: false, message: error.message })
   }
 })
+
+
 
 
 app.post('/listenEvent', async (req, res) => {
@@ -145,6 +170,35 @@ app.post('/listenEvent', async (req, res) => {
 });
 
 
+app.post('/readContract', async (req, res) => {
+  try {
+      const { address, abi, functionName, args } = req.body
+
+      const contract = new ethers.Contract(address, abi, walletAN)
+      
+      // Check if the function is callable i.e. it exists and it's a function
+      if (typeof contract[functionName] !== 'function') {
+          return res.status(400).json({
+              success: false,
+              message: 'Invalid function name provided.',
+          })
+      }
+
+      // Call the function
+      const result = await contract[functionName](...args)
+
+      res.json({
+          success: true,
+          data: result
+      })
+  } catch (error) {
+      console.error('Server error:', error)
+      res.status(500).json({
+          success: false,
+          message: error.message
+      })
+  }
+})
 
 
 
